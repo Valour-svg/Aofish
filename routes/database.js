@@ -225,4 +225,32 @@ router.post('/categories', async function (req, res) {
   }
 });
 
+router.get('/options', async function (req, res) {
+  try {
+    const result = await pool.query('SELECT id, name FROM options ORDER BY id');
+    res.json({ count: result.rows.length, options: result.rows });
+  } catch (error) {
+    res.status(500).json({ message: 'Options could not be loaded.' });
+  }
+});
+
+router.post('/options', async function (req, res) {
+  const name = (req.body.name || '').trim();
+
+  if (name === '') {
+    res.status(400).json({ message: 'A name is required.' });
+    return;
+  }
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO options (name) VALUES ($1) RETURNING id, name',
+      [name]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    res.status(400).json({ message: 'That option already exists.' });
+  }
+});
+
 module.exports = router;
