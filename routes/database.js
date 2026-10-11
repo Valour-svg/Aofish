@@ -1,36 +1,7 @@
 const express = require('express');
-const items = require('../data/items');
-const itemTypes = require('../data/itemTypes');
-const categories = require('../data/categories');
-const options = require('../data/options');
-const attributes = require('../data/attributes');
+const pool = require('../db');
 
 const router = express.Router();
-
-function findById(list, id) {
-  let index = 0;
-  while (index < list.length) {
-    if (list[index].id === id) {
-      return list[index];
-    }
-    index = index + 1;
-  }
-  return null;
-}
-
-function countItems(list, fieldName, id) {
-  let total = 0;
-  let index = 0;
-
-  while (index < list.length) {
-    if (list[index][fieldName] === id) {
-      total = total + 1;
-    }
-    index = index + 1;
-  }
-
-  return total;
-}
 
 function stockStatusFromCount(stock) {
   if (stock === 0) {
@@ -48,126 +19,156 @@ function stockStatusFromCount(stock) {
   return 'In stock';
 }
 
-function buildOptionDetails(item) {
-  const details = [];
-  const optionList = item.options || [];
-  let index = 0;
+router.get('/items', async function (req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT
+         items.id,
+         items.name,
+         items.sku,
+         items.item_type_id AS "itemTypeId",
+         item_types.name AS "itemTypeName",
+         items.category_id AS "categoryId",
+         categories.name AS "categoryName",
+         items.image,
+         items.designation,
+         items.gst,
+         items.packaging,
+         items.status,
+         items.updated,
+         COUNT(item_options.id)::int AS "optionCount"
+       FROM items
+       JOIN item_types ON item_types.id = items.item_type_id
+       JOIN categories ON categories.id = items.category_id
+       LEFT JOIN item_options ON item_options.item_id = items.id
+       GROUP BY items.id, item_types.name, categories.name
+       ORDER BY items.id`
+    );
 
-  while (index < optionList.length) {
-    const entry = optionList[index];
-    const option = findById(options, entry.optionId);
-    const attributeRows = [];
-    const attributeList = entry.attributes || [];
-    let attributeIndex = 0;
+    res.json({ count: result.rows.length, items: result.rows });
+  } catch (error) {
+    res.status(500).json({ message: 'Items could not be loaded.' });
+  }
+});
 
-    while (attributeIndex < attributeList.length) {
-      const attributeEntry = attributeList[attributeIndex];
-      const attribute = findById(attributes, attributeEntry.attributeId);
+router.get('/items/:id', async function (req, res) {
+  const itemId = Number(req.params.id);
 
-      if (attribute !== null) {
-        attributeRows.push({
-          id: attribute.id,
-          name: attribute.name,
-          stock: attributeEntry.stock,
-          unitPrice: attributeEntry.unitPrice,
-          fee: attributeEntry.fee,
-          stockStatus: stockStatusFromCount(attributeEntry.stock)
+  try {
+    const itemResult = await pool.query(
+      `SELECT
+         items.id,
+         items.name,
+         items.sku,
+         items.item_type_id AS "itemTypeId",
+         item_types.name AS "itemTypeName",
+         items.category_id AS "categoryId",
+         categories.name AS "categoryName",
+         items.image,
+         items.designation,
+         items.gst,
+         items.packaging,
+         items.status,
+         items.updated
+       FROM items
+       JOIN item_types ON item_types.id = items.item_type_id
+       JOIN categories ON categories.id = items.category_id
+       WHERE items.id = $1`,
+      [itemId]
+    );
+
+    if (itemResult.rows.length === 0) {
+      res.status(404).json({ message: 'Item was not found.' });
+      return;
+    }
+
+    const optionResult = await pool.query(
+      `SELECT
+         item_options.id AS "itemOptionId",
+         item_options.option_id AS "optionId",
+         options.name AS "optionName",
+         attributes.id AS "attributeId",
+         attributes.name AS "attributeName",
+         item_option_attributes.stock,
+         item_option_attributes.unit_price AS "unitPrice",
+         item_option_attributes.fee
+       FROM item_options
+       JOIN options ON options.id = item_options.option_id
+       LEFT JOIN item_option_attributes ON item_option_attributes.item_option_id = item_options.id
+       LEFT JOIN attributes ON attributes.id = item_option_attributes.attribute_id
+       WHERE item_options.item_id = $1
+       ORDER BY item_options.id, attributes.id`,
+      [itemId]
+    );
+
+    const optionDetails = [];
+    let index = 0;
+
+    while (index < optionResult.rows.length) {
+      const row = optionResult.rows[index];
+      let option = null;
+      let optionIndex = 0;
+
+      while (optionIndex < optionDetails.length) {
+        if (optionDetails[optionIndex].optionId === row.optionId) {
+          option = optionDetails[optionIndex];
+          break;
+        }
+        optionIndex = optionIndex + 1;
+      }
+
+      if (option === null) {
+        option = {
+          optionId: row.optionId,
+          optionName: row.optionName,
+          attributes: []
+        };
+        optionDetails.push(option);
+      }
+
+      if (row.attributeId !== null) {
+        option.attributes.push({
+          id: row.attributeId,
+          name: row.attributeName,
+          stock: row.stock,
+          unitPrice: row.unitPrice,
+          fee: row.fee,
+          stockStatus: stockStatusFromCount(row.stock)
         });
       }
 
-      attributeIndex = attributeIndex + 1;
+      index = index + 1;
     }
 
-    details.push({
-      optionId: entry.optionId,
-      optionName: option ? option.name : 'Missing option',
-      attributes: attributeRows
-    });
-
-    index = index + 1;
+    const item = itemResult.rows[0];
+    item.optionCount = optionDetails.length;
+    item.optionDetails = optionDetails;
+    res.json(item);
+  } catch (error) {
+    res.status(500).json({ message: 'Item could not be loaded.' });
   }
-
-  return details;
-}
-
-function buildSummary(item) {
-  const itemType = findById(itemTypes, item.itemTypeId);
-  const category = findById(categories, item.categoryId);
-  const optionList = item.options || [];
-
-  return {
-    id: item.id,
-    name: item.name,
-    sku: item.sku,
-    itemTypeId: item.itemTypeId,
-    itemTypeName: itemType ? itemType.name : 'Missing type',
-    categoryId: item.categoryId,
-    categoryName: category ? category.name : 'Missing category',
-    image: item.image,
-    optionCount: optionList.length,
-    designation: item.designation,
-    gst: item.gst,
-    packaging: item.packaging,
-    status: item.status,
-    updated: item.updated
-  };
-}
-
-router.get('/items', function (req, res) {
-  const rows = [];
-  let index = 0;
-
-  while (index < items.length) {
-    rows.push(buildSummary(items[index]));
-    index = index + 1;
-  }
-
-  res.json({ count: rows.length, items: rows });
 });
 
-router.get('/items/:id', function (req, res) {
-  const itemId = Number(req.params.id);
-  const item = findById(items, itemId);
+router.get('/item-types', async function (req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT
+         item_types.id,
+         item_types.name,
+         COUNT(items.id)::int AS "itemCount"
+       FROM item_types
+       LEFT JOIN items ON items.item_type_id = item_types.id
+       GROUP BY item_types.id
+       ORDER BY item_types.id`
+    );
 
-  if (item === null) {
-    res.status(404).json({ message: 'Item was not found.' });
-    return;
+    res.json({ count: result.rows.length, itemTypes: result.rows });
+  } catch (error) {
+    res.status(500).json({ message: 'Item types could not be loaded.' });
   }
-
-  const summary = buildSummary(item);
-  summary.optionDetails = buildOptionDetails(item);
-  res.json(summary);
 });
 
-function nextId(list) {
-  let highest = 0;
-  let index = 0;
-
-  while (index < list.length) {
-    if (list[index].id > highest) {
-      highest = list[index].id;
-    }
-    index = index + 1;
-  }
-
-  return highest + 1;
-}
-
-function nameExists(list, name) {
-  const needle = name.toLowerCase();
-  let index = 0;
-
-  while (index < list.length) {
-    if (list[index].name.toLowerCase() === needle) {
-      return true;
-    }
-    index = index + 1;
-  }
-
-  return false;
-}
-
-router.post('/item-types', function (req, res) {
+router.post('/item-types', async function (req, res) {
   const name = (req.body.name || '').trim();
 
   if (name === '') {
@@ -175,17 +176,37 @@ router.post('/item-types', function (req, res) {
     return;
   }
 
-  if (nameExists(itemTypes, name)) {
+  try {
+    const result = await pool.query(
+      'INSERT INTO item_types (name) VALUES ($1) RETURNING id, name',
+      [name]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
     res.status(400).json({ message: 'That item type already exists.' });
-    return;
   }
-
-  const record = { id: nextId(itemTypes), name: name };
-  itemTypes.push(record);
-  res.status(201).json(record);
 });
 
-router.post('/categories', function (req, res) {
+router.get('/categories', async function (req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT
+         categories.id,
+         categories.name,
+         COUNT(items.id)::int AS "itemCount"
+       FROM categories
+       LEFT JOIN items ON items.category_id = categories.id
+       GROUP BY categories.id
+       ORDER BY categories.id`
+    );
+
+    res.json({ count: result.rows.length, categories: result.rows });
+  } catch (error) {
+    res.status(500).json({ message: 'Categories could not be loaded.' });
+  }
+});
+
+router.post('/categories', async function (req, res) {
   const name = (req.body.name || '').trim();
 
   if (name === '') {
@@ -193,48 +214,15 @@ router.post('/categories', function (req, res) {
     return;
   }
 
-  if (nameExists(categories, name)) {
+  try {
+    const result = await pool.query(
+      'INSERT INTO categories (name) VALUES ($1) RETURNING id, name',
+      [name]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
     res.status(400).json({ message: 'That category already exists.' });
-    return;
   }
-
-  const record = { id: nextId(categories), name: name };
-  categories.push(record);
-  res.status(201).json(record);
-});
-
-router.get('/item-types', function (req, res) {
-  const rows = [];
-  let index = 0;
-
-  while (index < itemTypes.length) {
-    const itemType = itemTypes[index];
-    rows.push({
-      id: itemType.id,
-      name: itemType.name,
-      itemCount: countItems(items, 'itemTypeId', itemType.id)
-    });
-    index = index + 1;
-  }
-
-  res.json({ count: rows.length, itemTypes: rows });
-});
-
-router.get('/categories', function (req, res) {
-  const rows = [];
-  let index = 0;
-
-  while (index < categories.length) {
-    const category = categories[index];
-    rows.push({
-      id: category.id,
-      name: category.name,
-      itemCount: countItems(items, 'categoryId', category.id)
-    });
-    index = index + 1;
-  }
-
-  res.json({ count: rows.length, categories: rows });
 });
 
 module.exports = router;
