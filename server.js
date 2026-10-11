@@ -6,7 +6,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const databaseRoutes = require('./routes/database');
 
 const app = express();
-const PORT = 4000;
+const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json());
