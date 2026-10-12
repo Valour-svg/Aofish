@@ -281,4 +281,69 @@ router.post('/attributes', async function (req, res) {
   }
 });
 
+router.post('/items', async function (req, res) {
+  const name = (req.body.name || '').trim();
+  const sku = (req.body.sku || '').trim();
+  const itemTypeId = req.body.itemTypeId;
+  const categoryId = req.body.categoryId;
+  const options = req.body.options || [];
+
+  if (name === '' || sku === '') {
+    res.status(400).json({ message: 'Name and SKU are required.' });
+    return;
+  }
+
+  if (!itemTypeId || !categoryId) {
+    res.status(400).json({ message: 'Item type and category are required.' });
+    return;
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const itemResult = await client.query(
+      `INSERT INTO items (name, sku, item_type_id, category_id, status, updated)
+       VALUES ($1, $2, $3, $4, 'Active', NOW()::text)
+       RETURNING id`,
+      [name, sku, itemTypeId, categoryId]
+    );
+    const itemId = itemResult.rows[0].id;
+
+    let optionIndex = 0;
+    while (optionIndex < options.length) {
+      const option = options[optionIndex];
+      const optionResult = await client.query(
+        'INSERT INTO item_options (item_id, option_id) VALUES ($1, $2) RETURNING id',
+        [itemId, option.optionId]
+      );
+      const itemOptionId = optionResult.rows[0].id;
+      const attributes = option.attributes || [];
+      let attributeIndex = 0;
+
+      while (attributeIndex < attributes.length) {
+        const attribute = attributes[attributeIndex];
+        await client.query(
+          `INSERT INTO item_option_attributes
+             (item_option_id, attribute_id, stock, unit_price, fee)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [itemOptionId, attribute.attributeId, attribute.stock, attribute.unitPrice, attribute.fee]
+        );
+        attributeIndex = attributeIndex + 1;
+      }
+
+      optionIndex = optionIndex + 1;
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ id: itemId, name: name, sku: sku });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ message: 'Item could not be saved. The SKU may already exist.' });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
