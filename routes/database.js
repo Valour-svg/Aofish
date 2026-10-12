@@ -253,4 +253,32 @@ router.post('/options', async function (req, res) {
   }
 });
 
+router.get('/attributes', async function (req, res) {
+  try {
+    const result = await pool.query('SELECT id, name FROM attributes ORDER BY id');
+    res.json({ count: result.rows.length, attributes: result.rows });
+  } catch (error) {
+    res.status(500).json({ message: 'Attributes could not be loaded.' });
+  }
+});
+
+router.post('/attributes', async function (req, res) {
+  const name = (req.body.name || '').trim();
+
+  if (name === '') {
+    res.status(400).json({ message: 'A name is required.' });
+    return;
+  }
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO attributes (name) VALUES ($1) RETURNING id, name',
+      [name]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    res.status(400).json({ message: 'That attribute already exists.' });
+  }
+});
+
 module.exports = router;
