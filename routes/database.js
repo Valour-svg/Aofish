@@ -362,7 +362,7 @@ router.get('/packaging-items', async function (req, res) {
        FROM items
        JOIN item_types ON item_types.id = items.item_type_id
        JOIN categories ON categories.id = items.category_id
-       WHERE item_types.name = 'Fee'
+       WHERE item_types.name = 'Fees'
          AND categories.name = 'Packaging'
        ORDER BY items.name`
     );
