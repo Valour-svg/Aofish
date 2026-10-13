@@ -305,12 +305,13 @@ router.post('/items', async function (req, res) {
     const nextResult = await client.query('SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM items');
     const nextId = nextResult.rows[0].next_id;
     const sku = 'ITEM-' + String(nextId).padStart(4, '0');
+    const image = req.body.image || '/default-item.png';
 
     const itemResult = await client.query(
-      `INSERT INTO items (name, sku, item_type_id, category_id, status, updated)
-       VALUES ($1, $2, $3, $4, 'Active', NOW()::text)
+      `INSERT INTO items (name, sku, item_type_id, category_id, image, status, updated)
+       VALUES ($1, $2, $3, $4, $5, 'Active', NOW()::text)
        RETURNING id, sku`,
-      [name, sku, itemTypeId, categoryId]
+      [name, sku, itemTypeId, categoryId, image]
     );
     const itemId = itemResult.rows[0].id;
     const savedSku = itemResult.rows[0].sku;
