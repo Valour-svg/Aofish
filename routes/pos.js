@@ -13,7 +13,7 @@ router.get('/packaging-items', async function (req, res) {
          items.image,
          item_types.name AS "itemTypeName",
          categories.name AS "categoryName",
-         COALESCE(MIN(item_option_attributes.unit_price), 0) AS "unitPrice"
+         COALESCE(MIN(item_option_attributes.unit_price), 0)::int AS "unitPrice"
        FROM items
        JOIN item_types ON item_types.id = items.item_type_id
        JOIN categories ON categories.id = items.category_id
