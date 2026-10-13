@@ -4,6 +4,7 @@ const cors = require('cors');
 const loginRoutes = require('./routes/login');
 const dashboardRoutes = require('./routes/dashboard');
 const databaseRoutes = require('./routes/database');
+const posRoutes = require('./routes/pos');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -18,6 +19,7 @@ app.get('/api/health', function (req, res) {
 app.use('/api', loginRoutes);
 app.use('/api', dashboardRoutes);
 app.use('/api', databaseRoutes);
+app.use('/api', posRoutes);
 
 app.listen(PORT, function () {
   console.log('Server listening on http://localhost:' + PORT);

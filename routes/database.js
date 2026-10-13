@@ -351,27 +351,4 @@ router.post('/items', async function (req, res) {
   }
 });
 
-router.get('/packaging-items', async function (req, res) {
-  try {
-    const result = await pool.query(
-      `SELECT
-         items.id,
-         items.name,
-         items.sku,
-         item_types.name AS "itemTypeName",
-         categories.name AS "categoryName"
-       FROM items
-       JOIN item_types ON item_types.id = items.item_type_id
-       JOIN categories ON categories.id = items.category_id
-       WHERE item_types.name = 'Fees'
-         AND categories.name = 'Packaging'
-       ORDER BY items.name`
-    );
-
-    res.json({ count: result.rows.length, items: result.rows });
-  } catch (error) {
-    res.status(500).json({ message: 'Packaging items could not be loaded.' });
-  }
-});
-
 module.exports = router;
