@@ -10,6 +10,7 @@ router.get('/packaging-items', async function (req, res) {
          items.id,
          items.name,
          items.sku,
+         items.image,
          item_types.name AS "itemTypeName",
          categories.name AS "categoryName"
        FROM items
