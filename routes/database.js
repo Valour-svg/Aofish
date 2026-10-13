@@ -285,7 +285,6 @@ router.post('/items', async function (req, res) {
   const name = (req.body.name || '').trim();
   const itemTypeId = req.body.itemTypeId;
   const categoryId = req.body.categoryId;
-  const packaging = req.body.packaging === 'Yes' ? 'Yes' : 'No';
   const options = req.body.options || [];
 
   if (name === '') {
@@ -308,10 +307,10 @@ router.post('/items', async function (req, res) {
     const sku = 'ITEM-' + String(nextId).padStart(4, '0');
 
     const itemResult = await client.query(
-      `INSERT INTO items (name, sku, item_type_id, category_id, packaging, status, updated)
-       VALUES ($1, $2, $3, $4, $5, 'Active', NOW()::text)
+      `INSERT INTO items (name, sku, item_type_id, category_id, status, updated)
+       VALUES ($1, $2, $3, $4, 'Active', NOW()::text)
        RETURNING id, sku`,
-      [name, sku, itemTypeId, categoryId, packaging]
+      [name, sku, itemTypeId, categoryId]
     );
     const itemId = itemResult.rows[0].id;
     const savedSku = itemResult.rows[0].sku;
