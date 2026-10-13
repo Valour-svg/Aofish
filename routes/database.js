@@ -351,4 +351,59 @@ router.post('/items', async function (req, res) {
   }
 });
 
+router.delete('/items/:id', async function (req, res) {
+  const itemId = Number(req.params.id);
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `DELETE FROM item_option_attributes
+       WHERE item_option_id IN (SELECT id FROM item_options WHERE item_id = $1)`,
+      [itemId]
+    );
+    await client.query('DELETE FROM item_options WHERE item_id = $1', [itemId]);
+    const result = await client.query('DELETE FROM items WHERE id = $1 RETURNING id', [itemId]);
+    await client.query('COMMIT');
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ message: 'Item was not found.' });
+      return;
+    }
+
+    res.json({ id: itemId });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ message: 'Item could not be removed.' });
+  } finally {
+    client.release();
+  }
+});
+
+router.put('/items/:id', async function (req, res) {
+  const itemId = Number(req.params.id);
+  const name = (req.body.name || '').trim();
+
+  if (name === '') {
+    res.status(400).json({ message: 'A name is required.' });
+    return;
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE items SET name = $1, updated = NOW()::text WHERE id = $2 RETURNING id, name',
+      [name, itemId]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ message: 'Item was not found.' });
+      return;
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(400).json({ message: 'Item could not be updated.' });
+  }
+});
+
 module.exports = router;
