@@ -283,13 +283,13 @@ router.post('/attributes', async function (req, res) {
 
 router.post('/items', async function (req, res) {
   const name = (req.body.name || '').trim();
-  const sku = (req.body.sku || '').trim();
   const itemTypeId = req.body.itemTypeId;
   const categoryId = req.body.categoryId;
+  const packaging = req.body.packaging === 'Yes' ? 'Yes' : 'No';
   const options = req.body.options || [];
 
-  if (name === '' || sku === '') {
-    res.status(400).json({ message: 'Name and SKU are required.' });
+  if (name === '') {
+    res.status(400).json({ message: 'Name is required.' });
     return;
   }
 
@@ -303,13 +303,18 @@ router.post('/items', async function (req, res) {
   try {
     await client.query('BEGIN');
 
+    const nextResult = await client.query('SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM items');
+    const nextId = nextResult.rows[0].next_id;
+    const sku = 'ITEM-' + String(nextId).padStart(4, '0');
+
     const itemResult = await client.query(
-      `INSERT INTO items (name, sku, item_type_id, category_id, status, updated)
-       VALUES ($1, $2, $3, $4, 'Active', NOW()::text)
-       RETURNING id`,
-      [name, sku, itemTypeId, categoryId]
+      `INSERT INTO items (name, sku, item_type_id, category_id, packaging, status, updated)
+       VALUES ($1, $2, $3, $4, $5, 'Active', NOW()::text)
+       RETURNING id, sku`,
+      [name, sku, itemTypeId, categoryId, packaging]
     );
     const itemId = itemResult.rows[0].id;
+    const savedSku = itemResult.rows[0].sku;
 
     let optionIndex = 0;
     while (optionIndex < options.length) {
@@ -328,7 +333,7 @@ router.post('/items', async function (req, res) {
           `INSERT INTO item_option_attributes
              (item_option_id, attribute_id, stock, unit_price, fee)
            VALUES ($1, $2, $3, $4, $5)`,
-          [itemOptionId, attribute.attributeId, attribute.stock, attribute.unitPrice, attribute.fee]
+          [itemOptionId, attribute.attributeId, attribute.stock, attribute.unitPrice, 0]
         );
         attributeIndex = attributeIndex + 1;
       }
@@ -337,12 +342,35 @@ router.post('/items', async function (req, res) {
     }
 
     await client.query('COMMIT');
-    res.status(201).json({ id: itemId, name: name, sku: sku });
+    res.status(201).json({ id: itemId, name: name, sku: savedSku });
   } catch (error) {
     await client.query('ROLLBACK');
     res.status(400).json({ message: 'Item could not be saved. The SKU may already exist.' });
   } finally {
     client.release();
+  }
+});
+
+router.get('/packaging-items', async function (req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT
+         items.id,
+         items.name,
+         items.sku,
+         item_types.name AS "itemTypeName",
+         categories.name AS "categoryName"
+       FROM items
+       JOIN item_types ON item_types.id = items.item_type_id
+       JOIN categories ON categories.id = items.category_id
+       WHERE item_types.name = 'Fee'
+         AND categories.name = 'Packaging'
+       ORDER BY items.name`
+    );
+
+    res.json({ count: result.rows.length, items: result.rows });
+  } catch (error) {
+    res.status(500).json({ message: 'Packaging items could not be loaded.' });
   }
 });
 
