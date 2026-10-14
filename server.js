@@ -5,6 +5,7 @@ const loginRoutes = require('./routes/login');
 const dashboardRoutes = require('./routes/dashboard');
 const databaseRoutes = require('./routes/database');
 const posRoutes = require('./routes/pos');
+const eventRoutes = require('./routes/events');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -20,6 +21,8 @@ app.use('/api', loginRoutes);
 app.use('/api', dashboardRoutes);
 app.use('/api', databaseRoutes);
 app.use('/api', posRoutes);
+app.use('/api', eventRoutes);
+
 
 app.listen(PORT, function () {
   console.log('Server listening on http://localhost:' + PORT);

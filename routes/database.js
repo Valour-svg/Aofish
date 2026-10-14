@@ -28,6 +28,7 @@ router.get('/items', async function (req, res) {
          items.sku,
          items.item_type_id AS "itemTypeId",
          item_types.name AS "itemTypeName",
+         events.name AS "eventName",
          items.category_id AS "categoryId",
          categories.name AS "categoryName",
          items.image,
@@ -40,8 +41,9 @@ router.get('/items', async function (req, res) {
        FROM items
        JOIN item_types ON item_types.id = items.item_type_id
        JOIN categories ON categories.id = items.category_id
+       LEFT JOIN events ON events.id = items.event_id
        LEFT JOIN item_options ON item_options.item_id = items.id
-       GROUP BY items.id, item_types.name, categories.name
+       GROUP BY items.id, item_types.name, categories.name, events.name
        ORDER BY items.id`
     );
 

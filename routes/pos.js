@@ -37,6 +37,7 @@ router.post('/payments', async function (req, res) {
   const gstCost = Number(req.body.gstCost || 0);
   const grandTotal = Number(req.body.grandTotal || 0);
   const lines = req.body.lines || [];
+  const eventId = req.body.eventId || null;
   const client = await pool.connect();
 
   try {
@@ -45,12 +46,19 @@ router.post('/payments', async function (req, res) {
     const orderCode = 'POS-' + String(nextResult.rows[0].next_id).padStart(4, '0');
 
     const paymentResult = await client.query(
-      `INSERT INTO payments (order_code, type, items_cost, packaging_cost, gst_cost, grand_total, created_at)
-       VALUES ($1, 'POS', $2, $3, $4, $5, NOW()::text)
+      `INSERT INTO payments (order_code, type, items_cost, packaging_cost, gst_cost, grand_total, event_id, created_at)
+       VALUES ($1, 'POS', $2, $3, $4, $5, $6, NOW()::text)
        RETURNING id, order_code`,
-      [orderCode, itemsCost, packagingCost, gstCost, grandTotal]
+      [orderCode, itemsCost, packagingCost, gstCost, grandTotal, eventId]
     );
     const paymentId = paymentResult.rows[0].id;
+
+    if (eventId) {
+      await client.query(
+        'UPDATE events SET sales = sales + 1, orders = orders + 1, revenue = revenue + $1 WHERE id = $2',
+        [grandTotal, eventId]
+      );
+    }
 
     let index = 0;
     while (index < lines.length) {
