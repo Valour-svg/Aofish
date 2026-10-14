@@ -85,15 +85,17 @@ router.get('/payments', async function (req, res) {
   try {
     const result = await pool.query(
       `SELECT
-         id,
-         order_code AS "orderCode",
-         type,
-         items_cost AS "itemsCost",
-         packaging_cost AS "packagingCost",
-         gst_cost AS "gstCost",
-         grand_total AS "grandTotal"
+         payments.id,
+         payments.order_code AS "orderCode",
+         payments.type,
+         events.name AS "eventName",
+         payments.items_cost AS "itemsCost",
+         payments.packaging_cost AS "packagingCost",
+         payments.gst_cost AS "gstCost",
+         payments.grand_total AS "grandTotal"
        FROM payments
-       ORDER BY id DESC`
+       LEFT JOIN events ON events.id = payments.event_id
+       ORDER BY payments.id DESC`
     );
     res.json({ count: result.rows.length, payments: result.rows });
   } catch (error) {
