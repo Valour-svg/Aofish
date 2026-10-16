@@ -33,12 +33,16 @@ router.get('/events/:id', async function (req, res) {
          items.id,
          items.name,
          items.sku,
+         item_types.name AS "itemTypeName",
+         categories.name AS "categoryName",
          COALESCE(SUM(item_option_attributes.stock), 0)::int AS stock
        FROM items
+       JOIN item_types ON item_types.id = items.item_type_id
+       JOIN categories ON categories.id = items.category_id
        LEFT JOIN item_options ON item_options.item_id = items.id
        LEFT JOIN item_option_attributes ON item_option_attributes.item_option_id = item_options.id
        WHERE items.event_id = $1
-       GROUP BY items.id
+       GROUP BY items.id, item_types.name, categories.name
        ORDER BY items.name`,
       [req.params.id]
     );
