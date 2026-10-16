@@ -92,7 +92,13 @@ router.post('/events', async function (req, res) {
   const city = (req.body.city || '').trim();
   const venue = (req.body.venue || '').trim();
   const cost = Number(req.body.cost || 0);
-  const itemIds = req.body.itemIds || [];
+  const itemIds = [];
+  let idIndex = 0;
+  const rawIds = req.body.itemIds || [];
+  while (idIndex < rawIds.length) {
+    itemIds.push(Number(rawIds[idIndex]));
+    idIndex = idIndex + 1;
+  }
 
   if (name === '') {
     res.status(400).json({ message: 'An event name is required.' });
@@ -135,7 +141,7 @@ router.post('/events', async function (req, res) {
     res.status(201).json({ id: eventId, name: name, stock: stockTotal });
   } catch (error) {
     await client.query('ROLLBACK');
-    res.status(400).json({ message: 'The event could not be created.' });
+    res.status(400).json({ message: error.message || 'The event could not be created.' });
   } finally {
     client.release();
   }
