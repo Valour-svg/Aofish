@@ -19,7 +19,7 @@ router.get('/events', async function (req, res) {
 router.get('/events/:id', async function (req, res) {
   try {
     const eventResult = await pool.query(
-      'SELECT id, name, sales, orders, stock, revenue, cost FROM events WHERE id = $1',
+      'SELECT id, name, sales, orders, stock, revenue, cost, start_date AS "startDate", end_date AS "endDate", city, venue FROM events WHERE id = $1',
       [req.params.id]
     );
 
