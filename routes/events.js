@@ -6,7 +6,7 @@ const router = express.Router();
 router.get('/events', async function (req, res) {
   try {
     const result = await pool.query(
-      `SELECT id, name, sales, orders, stock, revenue, cost
+      `SELECT id, name, sales, orders, stock, revenue, cost, start_date AS "startDate", end_date AS "endDate", city, venue
        FROM events
        ORDER BY id`
     );
@@ -82,6 +82,62 @@ router.get('/events/:id', async function (req, res) {
     res.json(eventRow);
   } catch (error) {
     res.status(500).json({ message: 'Event could not be loaded.' });
+  }
+});
+
+router.post('/events', async function (req, res) {
+  const name = (req.body.name || '').trim();
+  const startDate = req.body.startDate || '';
+  const endDate = req.body.endDate || '';
+  const city = (req.body.city || '').trim();
+  const venue = (req.body.venue || '').trim();
+  const cost = Number(req.body.cost || 0);
+  const itemIds = req.body.itemIds || [];
+
+  if (name === '') {
+    res.status(400).json({ message: 'An event name is required.' });
+    return;
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    let stockTotal = 0;
+    if (itemIds.length > 0) {
+      const stockResult = await client.query(
+        `SELECT COALESCE(SUM(item_option_attributes.stock), 0)::int AS stock
+         FROM items
+         LEFT JOIN item_options ON item_options.item_id = items.id
+         LEFT JOIN item_option_attributes ON item_option_attributes.item_option_id = item_options.id
+         WHERE items.id = ANY($1::int[])`,
+        [itemIds]
+      );
+      stockTotal = stockResult.rows[0].stock;
+    }
+
+    const eventResult = await client.query(
+      `INSERT INTO events (name, start_date, end_date, city, venue, cost, sales, orders, stock, revenue)
+       VALUES ($1, $2, $3, $4, $5, $6, 0, 0, $7, 0)
+       RETURNING id, name`,
+      [name, startDate, endDate, city, venue, cost, stockTotal]
+    );
+    const eventId = eventResult.rows[0].id;
+
+    let index = 0;
+    while (index < itemIds.length) {
+      await client.query('UPDATE items SET event_id = $1 WHERE id = $2', [eventId, itemIds[index]]);
+      index = index + 1;
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ id: eventId, name: name, stock: stockTotal });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ message: 'The event could not be created.' });
+  } finally {
+    client.release();
   }
 });
 
